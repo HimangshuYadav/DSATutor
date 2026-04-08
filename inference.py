@@ -1,6 +1,12 @@
 """
-Baseline Agent for DSATutor Benchmarking.
-Uses an LLM to generate solutions and evaluates them using the tutor server.
+Inference Script for DSATutor
+===================================
+MANDATORY
+- Before submitting, ensure the following variables are defined:
+    API_BASE_URL   The API endpoint for the LLM.
+    MODEL_NAME     The model identifier to use.
+    HF_TOKEN       Your Hugging Face / API key.
+    LOCAL_IMAGE_NAME (Optional) The name of the local image if using Docker.
 """
 
 import asyncio
@@ -10,28 +16,22 @@ import logging
 from typing import List, Optional
 from openai import OpenAI
 
-# Environment configuration
-API_BASE = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
-MODEL = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
-TOKEN = os.getenv("HF_TOKEN") or os.getenv("GROQ_API_KEY") or os.getenv("GEMINI_API_KEY")
-TARGET_URL = os.getenv("ENV_URL", "http://127.0.0.1:7860")
-
-# Setup clean logging
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+# ── Logging Suppression ──────────────────────────────────────────
+# Ensure ONLY the mandated [START], [STEP], and [END] tags hit stdout
 logging.getLogger("httpx").setLevel(logging.WARNING)
-logger = logging.getLogger(__name__)
+logging.getLogger("openai").setLevel(logging.WARNING)
 
-# Standard OpenEnv Logging Helpers
-def log_start(task: str, env: str, model: str):
-    logger.info(f"[START] task={task} env={env} model={model}")
+# ── Environment Configuration ─────────────────────────────────────
+API_BASE_URL = os.getenv("API_BASE_URL") or "https://api.groq.com/openai/v1"
+MODEL_NAME = os.getenv("MODEL_NAME") or "llama-3.3-70b-versatile"
+HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("GROQ_API_KEY") 
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
+ENV_URL = os.getenv("ENV_URL", "http://127.0.0.1:7860")
 
-def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]):
-    logger.info(f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error or 'null'}")
+MAX_STEPS = 1
+TEMPERATURE = 0.1
+SUCCESS_SCORE_THRESHOLD = 0.9
 
-def log_end(success: bool, steps: int, score: float, rewards: List[float]):
-    logger.info(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={','.join(f'{r:.2f}' for r in rewards)}")
-
-# Task configuration for the agent
 TASKS = [
     {"title": "Two Sum", "prompt": "Implement Two Sum in Python. Define `two_sum(nums, target)`. Return ONLY code."},
     {"title": "Longest Increasing Subsequence", "prompt": "Implement LIS in Python. Define `lis_length(nums)`. Return ONLY code."},
@@ -40,55 +40,86 @@ TASKS = [
     {"title": "Merge K Sorted Lists", "prompt": "Implement Merge K Sorted Lists in Python. Define `merge_k_lists(lists)`. Return ONLY code."},
 ]
 
-async def generate_code(prompt: str) -> str:
+# ── Logging Helpers (STDOUT FORMAT) ──────────────────────────────
+def log_start(task: str, env: str, model: str) -> None:
+    print(f"[START] task={task} env={env} model={model}", flush=True)
+
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
+    error_val = error if error else "null"
+    done_val = str(done).lower()
+    print(
+        f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}",
+        flush=True,
+    )
+
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+
+# ── Inference Logic ──────────────────────────────────────────────
+def get_model_message(client: OpenAI, prompt: str) -> str:
     """Invokes the LLM to generate an algorithmic solution."""
     try:
-        # Use OpenAI-style client
-        client = OpenAI(base_url=API_BASE, api_key=TOKEN)
-        completion = await asyncio.to_thread(
-            client.chat.completions.create,
-            model=MODEL,
+        completion = client.chat.completions.create(
+            model=MODEL_NAME,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.1
+            temperature=TEMPERATURE,
+            stream=False,
         )
-        content = completion.choices[0].message.content or ""
-        # Precise code extraction
+        content = (completion.choices[0].message.content or "").strip()
+        
         if "```python" in content:
             return content.split("```python")[1].split("```")[0].strip()
         elif "```" in content:
             return content.split("```")[1].split("```")[0].strip()
-        return content.strip()
-    except Exception as e:
-        return f"# LLM Error: {e}"
+        return content
+    except Exception as exc:
+        return f"# Model request failed: {exc}"
 
-async def evaluate_tasks():
-    """Main loop to evaluate the agent across standard tasks."""
-    async with httpx.AsyncClient(base_url=TARGET_URL, timeout=60.0) as session:
+async def main() -> None:
+    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+
+    async with httpx.AsyncClient(base_url=ENV_URL, timeout=60.0) as session:
         for task in TASKS:
-            log_start(task=task["title"], env="DSATutor", model=MODEL)
+            rewards = []
+            steps_taken = 0
+            score = 0.0
+            success = False
             
+            log_start(task=task["title"], env="DSATutor", model=MODEL_NAME)
+
             try:
-                # Prepare environment
                 await session.post("/reset")
                 
-                # Interaction attempt
-                solution = await generate_code(task["prompt"])
-                
-                response = await session.post("/api/grade_deterministic", json={
-                    "code": solution,
-                    "problem": task["title"]
-                })
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    reward = data.get("score", 0.0)
-                    log_step(step=1, action="solve", reward=reward, done=(reward >= 0.9), error=None)
-                    log_end(success=(reward >= 0.9), steps=1, score=reward, rewards=[reward])
-                else:
-                    log_end(success=False, steps=1, score=0.0, rewards=[0.0])
+                for step in range(1, MAX_STEPS + 1):
+                    solution = get_model_message(client, task["prompt"])
                     
-            except Exception as e:
-                logger.error(f"Execution failure: {e}")
+                    response = await session.post("/api/grade_deterministic", json={
+                        "code": solution,
+                        "problem": task["title"]
+                    })
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        reward = data.get("score", 0.0)
+                        done = (reward >= SUCCESS_SCORE_THRESHOLD)
+                    else:
+                        reward = 0.0
+                        done = True
+
+                    rewards.append(reward)
+                    steps_taken = step
+                    
+                    log_step(step=step, action="solve", reward=reward, done=done, error=None)
+                    
+                    if done:
+                        break
+
+                score = sum(rewards) / len(rewards) if rewards else 0.0
+                success = score >= SUCCESS_SCORE_THRESHOLD
+
+            finally:
+                log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
 if __name__ == "__main__":
-    asyncio.run(evaluate_tasks())
+    asyncio.run(main())

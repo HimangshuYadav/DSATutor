@@ -3,20 +3,19 @@ import json
 import re
 import logging
 from openai import OpenAI
-from google import genai
 
 # Logging configuration
 logger = logging.getLogger(__name__)
 
 # Provider configuration
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("GROQ_API_KEY") or os.getenv("GEMINI_API_KEY")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
 
-# Initialize OpenAI-compatible client for Groq or similar providers
+# Initialize OpenAI-compatible client
 client = OpenAI(
-    base_url=os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1"),
-    api_key=GROQ_API_KEY or GEMINI_API_KEY # Some users use Gemini keys through a proxy
+    base_url=API_BASE_URL,
+    api_key=HF_TOKEN
 )
 
 def evaluate_with_ai(code: str, task: dict, language: str) -> dict:
@@ -40,24 +39,8 @@ def evaluate_with_ai(code: str, task: dict, language: str) -> dict:
         )
         return json.loads(response.choices[0].message.content)
     except Exception as e:
-        logger.warning(f"Primary AI evaluation failed: {e}. Falling back to Gemini SDK.")
-        if GEMINI_API_KEY:
-            return _evaluate_via_gemini_sdk(code, task, language)
+        logger.warning(f"AI evaluation failed: {e}")
         return {"correctness": calculate_heuristic_grade(code, task), "feedback": "Evaluation completed via local reasoning engine."}
-
-def _evaluate_via_gemini_sdk(code: str, task: dict, lang: str) -> dict:
-    """Direct fallback to Google GenAI SDK if OpenAI-style proxy fails."""
-    try:
-        engine = genai.Client(api_key=GEMINI_API_KEY)
-        response = engine.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=f"Extract JSON evaluation {{'correctness': float, 'feedback': str}} for:\nProblem: {task['prompt']}\nCode: {code}"
-        )
-        match = re.search(r"\{.*\}", response.text, re.DOTALL)
-        return json.loads(match.group())
-    except Exception as inner:
-        logger.error(f"Gemini SDK fallback also failed: {inner}")
-        return {"correctness": 0.0, "feedback": "Critical evaluation error. Please ensure your API keys are valid."}
 
 def calculate_heuristic_grade(code: str, task: dict) -> float:
     """Purely local heuristic for grading when all AI providers are unreachable."""
