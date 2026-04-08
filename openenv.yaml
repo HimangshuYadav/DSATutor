@@ -1,0 +1,67 @@
+name: DSATutor
+description: "Adaptive DSA tutoring environment that evaluates student code solutions with AI grading and deterministic test cases."
+version: "2.0.0"
+port: 7860
+
+action_space:
+  type: DSAAction
+  fields:
+    - action_type: "suggest_problem | evaluate_code | adjust_difficulty"
+    - code_string: "Student's code solution"
+    - language: "python | cpp | java | javascript"
+    - difficulty: "0 (Easy) | 1 (Medium) | 2 (Hard)"
+    - adjustment: "up | down"
+
+observation_space:
+  type: DSAObservation
+  fields:
+    - current_problem: "Title of the current problem"
+    - difficulty: "Current difficulty level (0-2)"
+    - feedback_summary: "AI feedback on the submission"
+    - score: "Most recent submission score (0.0-1.0)"
+    - done: "Whether the episode has ended"
+    - reward: "Reward signal from the last action"
+
+tasks:
+  - id: task_two_sum
+    title: "Two Sum"
+    difficulty: easy
+    description: "Find two indices whose values sum to a target"
+    grader: deterministic
+    test_cases: 6
+    expected_complexity: "O(N)"
+
+  - id: task_lis
+    title: "Longest Increasing Subsequence"
+    difficulty: medium
+    description: "Find the length of the longest strictly increasing subsequence"
+    grader: deterministic
+    test_cases: 6
+    expected_complexity: "O(N log N)"
+
+  - id: task_islands
+    title: "Number of Islands"
+    difficulty: hard
+    description: "Count connected components in a 2D grid"
+    grader: deterministic
+    test_cases: 6
+    expected_complexity: "O(M*N)"
+
+reward:
+  type: continuous
+  range: [0.0, 1.0]
+  tiers:
+    wrong: "0.0 - 0.4"
+    correct_suboptimal: "0.5 - 0.8"
+    perfect: "0.9 - 1.0"
+  penalties:
+    skip_problem: -0.1
+  completion:
+    requires: "level=2, success_rate>=0.8, attempts>=5, streak>=3"
+
+environment:
+  variables:
+    - API_BASE_URL: "Base URL of the environment server"
+    - MODEL_NAME: "LLM model name for inference"
+    - HF_TOKEN: "Hugging Face token for deployment"
+    - GROQ_API_KEY: "Groq API key for AI grading"

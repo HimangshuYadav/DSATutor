@@ -1,0 +1,6 @@
+INFO:     Started server process [38123]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:7860 (Press CTRL+C to quit)
+INFO:     127.0.0.1:49836 - "POST /reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49839 - "POST /api/grade_deterministic HTTP/1.1" 200 OK

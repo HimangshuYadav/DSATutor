@@ -1,0 +1,39 @@
+# Logs
+server.log
+nohup.out
+
+# Scripts & Temporary
+validate_submission.sh
+validate_submission_*.sh
+tmp/
+*.sh
+!server/scripts/*.sh
+
+# Documentation
+*.md
+!README.md
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.venv
+.pytest_cache/
+.coverage
+
+# Docker/Git
+.git/
+.github/
+.dockerignore
+Dockerfile
+
+# Frontend build trash
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+node_modules/

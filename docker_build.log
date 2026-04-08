@@ -1,0 +1,47 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 551B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.11-slim
+#2 DONE 0.4s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 381B done
+#3 DONE 0.0s
+
+#4 [internal] load build context
+#4 transferring context: 1.59kB done
+#4 DONE 0.0s
+
+#5 [1/5] FROM docker.io/library/python:3.11-slim@sha256:b1b81d67b8df73bf6067191790c233ef9e598b863fc1ccf447956138ca466d99
+#5 resolve docker.io/library/python:3.11-slim@sha256:b1b81d67b8df73bf6067191790c233ef9e598b863fc1ccf447956138ca466d99 0.0s done
+#5 DONE 0.0s
+
+#6 [3/5] COPY requirements.txt .
+#6 CACHED
+
+#7 [2/5] WORKDIR /app
+#7 CACHED
+
+#8 [4/5] RUN pip install --no-cache-dir -r requirements.txt
+#8 CACHED
+
+#9 [5/5] COPY . .
+#9 DONE 0.0s
+
+#10 exporting to image
+#10 exporting layers 0.0s done
+#10 exporting manifest sha256:1771aaef8cee05f210d0385f9cf7490e550dc9322bf44817c6df8d2bcb222f3e done
+#10 exporting config sha256:644e26c34132f8dd140c0f098c3943ea145e05a3230b56361ec98d000aa4fa91 done
+#10 exporting attestation manifest sha256:a7678131093bd22887abe5c1c4b3fc7998244c3028f985b00d14638a0cc24d7b done
+#10 exporting manifest list sha256:7507d065851ca8cac491172a06c44a901aadfb3208f8bae6c28d50397b697b3a done
+#10 naming to docker.io/library/dsatutor-env:latest done
+#10 unpacking to docker.io/library/dsatutor-env:latest done
+#10 DONE 0.0s
+
+ [33m3 warnings found (use docker --debug to expand):
+[0m - SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "HF_TOKEN") (line 18)
+ - SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "GROQ_API_KEY") (line 19)
+ - SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "GEMINI_API_KEY") (line 20)

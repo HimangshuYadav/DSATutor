@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DSATutor - Adaptive Learning</title>
+    <link rel="stylesheet" href="static/style.css?v=2">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta name="description" content="An OpenEnv Reinforcement Learning environment for Data Structures and Algorithms.">
+</head>
+<body>
+    <div class="container">
+        <!-- Main Header -->
+        <header class="header">
+            <h1>DSATutor AI</h1>
+            <p>Adaptive Reinforcement Learning Environment</p>
+        </header>
+
+        <!-- Dynamic Content Area -->
+        <main id="app">
+            <!-- Loading state -->
+            <div id="loading" class="glass-panel" style="text-align: center;">
+                <h2>Initializing Environment...</h2>
+            </div>
+
+            <!-- Page 1: Topic Selection -->
+            <section id="page-topics" class="glass-panel hidden">
+                <h2>Select Your Focus Areas</h2>
+                <p style="color: var(--text-muted); margin-bottom: 1rem;">Choose the topics you want to practice. The AI will adapt the problems to your skill level.</p>
+                <div class="topics-grid" id="topics-grid">
+                    <!-- Topics injected by JS -->
+                </div>
+                <button id="btn-start-assessment">Start Assessment</button>
+            </section>
+
+            <!-- Page 2: Skill Assessment -->
+            <section id="page-assessment" class="glass-panel hidden">
+                <h2>Skill Assessment</h2>
+                <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Answer these quick questions to calibrate the environment difficulty.</p>
+                
+                <div class="mcq-question">
+                    <h3>1. What is the average time complexity of finding an element in a Hash Table?</h3>
+                    <div class="options">
+                        <label><input type="radio" name="q1" value="1"> O(1)</label>
+                        <label><input type="radio" name="q1" value="0"> O(log N)</label>
+                        <label><input type="radio" name="q1" value="0"> O(N)</label>
+                    </div>
+                </div>
+
+                <div class="mcq-question">
+                    <h3>2. Which data structure uses LIFO?</h3>
+                    <div class="options">
+                        <label><input type="radio" name="q2" value="0"> Queue</label>
+                        <label><input type="radio" name="q2" value="1"> Stack</label>
+                        <label><input type="radio" name="q2" value="0"> Tree</label>
+                    </div>
+                </div>
+
+                <button id="btn-submit-assessment">Submit & Start Coding</button>
+            </section>
+
+            <!-- Page 3: Problem / Playground -->
+            <section id="page-playground" class="hidden">
+                <!-- Status Bar -->
+                <div class="progress-indicator">
+                    <div class="stat">
+                        <span class="stat-label">Current Level</span>
+                        <span class="stat-value" id="ui-level">Beginner</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Success Rate</span>
+                        <span class="stat-value" id="ui-score">0.0</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Streak</span>
+                        <span class="stat-value" id="ui-streak">0</span>
+                    </div>
+                </div>
+
+                <div class="playground">
+                    <!-- Left: Problem Statement -->
+                    <div class="glass-panel">
+                        <div class="problem-header">
+                            <h2 id="prob-title">Loading Problem...</h2>
+                            <span id="prob-difficulty" class="difficulty-badge diff-easy">EASY</span>
+                        </div>
+                        <p id="prob-desc" style="margin-bottom: 1rem;">Problem description goes here...</p>
+                        <hr style="border:0; border-top: 1px solid var(--border); margin: 1.5rem 0;">
+                        <h3>Expected Complexity</h3>
+                        <p id="prob-hint" style="font-family: 'Fira Code', monospace; color: var(--accent-primary); margin-top: 0.5rem;"></p>
+                    </div>
+
+                    <!-- Right: Editor & Feedback -->
+                    <div class="glass-panel">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <h3 style="margin: 0;">Your Solution</h3>
+                            <select id="lang-select" class="lang-dropdown">
+                                <option value="python">Python</option>
+                                <option value="cpp">C++</option>
+                                <option value="java">Java</option>
+                                <option value="javascript">JavaScript</option>
+                            </select>
+                        </div>
+                        <textarea id="code-editor" spellcheck="false">def solve():
+    # Write your code here
+    pass</textarea>
+                        
+                        <div style="margin-top: 1rem; display: flex; justify-content: flex-end; gap: 1rem;">
+                            <button id="btn-next-prob" style="background: rgba(255,255,255,0.1);">Change Problem</button>
+                            <button id="btn-submit-code">Submit Solution</button>
+                        </div>
+
+                        <!-- Feedback Box -->
+                        <div id="feedback-panel" class="feedback-panel hidden">
+                            <h4 id="feedback-title" style="margin-bottom: 0.5rem; color: var(--success);">Feedback</h4>
+                            <p id="feedback-text">Good job!</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Progress Graph -->
+                <div class="glass-panel" style="margin-top: 2rem;">
+                    <h3 style="margin-bottom: 1rem;">Learning Progress</h3>
+                    <div class="chart-container" style="position: relative; height:300px; width:100%">
+                        <canvas id="progressChart"></canvas>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Post-Submission Modal -->
+    <div id="submit-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-panel">
+            <div id="modal-icon" class="modal-icon">✅</div>
+            <h3 id="modal-title">Great Job!</h3>
+            <p id="modal-feedback" class="modal-feedback">Your solution scored well.</p>
+            <div id="modal-score-bar" class="modal-score-bar">
+                <div id="modal-score-fill" class="modal-score-fill"></div>
+            </div>
+            <p id="modal-score-label" class="modal-score-label">Score: 0.85</p>
+            <div class="modal-buttons">
+                <button id="modal-btn-retry" class="modal-btn-secondary">Try Again</button>
+                <button id="modal-btn-next" class="modal-btn-primary">Next Problem →</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/script.js?v=2"></script>
+</body>
+</html>
