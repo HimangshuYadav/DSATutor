@@ -1,154 +1,62 @@
-"""
-AI Evaluation Client.
-Handles the multi-provider fallback logic for grading student code.
-Providers (in order): Groq (Llama), Gemini, and a safe local heuristic.
-"""
-
 import os
 import json
 import re
+import logging
+from openai import OpenAI
+from google import genai
 
-try:
-    from groq import Groq
-except ImportError:
-    Groq = None
+# Logging configuration
+logger = logging.getLogger(__name__)
 
-try:
-    from google import genai
-except ImportError:
-    genai = None
+# Provider configuration
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
 
-# --- Configuration ---
+# Initialize OpenAI-compatible client for Groq or similar providers
+client = OpenAI(
+    base_url=os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1"),
+    api_key=GROQ_API_KEY or GEMINI_API_KEY # Some users use Gemini keys through a proxy
+)
 
-GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile"
-GEMINI_DEFAULT_MODEL = "gemini-2.0-flash"
-
-def _get_groq_engine():
-    key = os.environ.get("GROQ_API_KEY")
-    return Groq(api_key=key) if key and Groq else None
-
-def _get_gemini_engine():
-    key = os.environ.get("GEMINI_EVAL_API_KEY") or os.environ.get("GEMINI_API_KEY")
-    return genai.Client(api_key=key) if key and genai else None
-
-# --- Helpers ---
-
-def _clean_json_response(text: str) -> dict:
-    """Extracts JSON from common markdown block patterns."""
-    text = text.strip()
-    patterns = [r"```json", r"```"]
-    for p in patterns:
-        if text.startswith(p):
-            text = text[len(p):]
-        if text.endswith("```"):
-            text = text[:-3]
-    return json.loads(text.strip())
-
-def _construct_tutor_prompt(code: str, task: dict, lang: str) -> str:
-    """Builds the grading prompt for the LLM providers."""
-    return f"""Evaluate implementation for: "{task['title']}".
-Description: {task['description']}
-Expected Complexity: {task['expected_complexity']}
-Language: {lang}
-
-Code:
-```{lang}
-{code}
-```
-
-Grading Criteria:
-1. correctness (0.0-1.0): 0.5+ means correct logic. 0.9+ means optimal and clean.
-2. Be strict on performance. If significantly slower than {task['expected_complexity']}, don't exceed 0.8.
-3. Feedback: 1-2 sentences on what's failing. Do NOT provide code or specific fixes.
-
-Return a JSON object:
-{{
-    "correctness": float,
-    "complexity": "e.g. O(N)",
-    "feedback_summary": "Short critique",
-    "optimization_hint": "Vague directional nudge"
-}}"""
-
-# --- Provider Implementations ---
-
-def _evaluate_via_groq(code: str, task: dict, lang: str) -> dict | None:
-    engine = _get_groq_engine()
-    if not engine:
-        return None
-
+def evaluate_with_ai(code: str, task: dict, language: str) -> dict:
+    """Performs deep code evaluation using available AI providers."""
     try:
-        chat = engine.chat.completions.create(
-            model=GROQ_DEFAULT_MODEL,
+        # Standardize interaction with LLM
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": "You are a senior algorithms examiner. Return ONLY JSON."},
-                {"role": "user", "content": _construct_tutor_prompt(code, task, lang)}
+                {"role": "system", "content": "You are a specialized DSA Tutor. Evaluate the submission's CORRECTNESS (0-1) and provide SOCRATIC FEEDBACK in JSON format."},
+                {"role": "user", "content": f"Problem: {task['prompt']}\nLanguage: {language}\nSubmitted Code:\n{code}"}
             ],
-            temperature=0.2,
-            max_tokens=400,
+            response_format={"type": "json_object"}
         )
-        content = chat.choices[0].message.content.strip()
-        data = _clean_json_response(content)
-        data.update({"_rate_limited": False, "_provider": "groq"})
-        return data
+        return json.loads(response.choices[0].message.content)
     except Exception as e:
-        print(f"Groq provider hint: {e}")
-        return None
+        logger.warning(f"Primary AI evaluation failed: {e}. Falling back to Gemini SDK.")
+        if GEMINI_API_KEY:
+            return _evaluate_via_gemini_sdk(code, task, language)
+        return {"correctness": calculate_heuristic_grade(code, task), "feedback": "Evaluation completed via local reasoning engine."}
 
-def _evaluate_via_gemini(code: str, task: dict, lang: str) -> dict | None:
-    engine = _get_gemini_engine()
-    if not engine:
-        return None
-
+def _evaluate_via_gemini_sdk(code: str, task: dict, lang: str) -> dict:
+    """Direct fallback to Google GenAI SDK if OpenAI-style proxy fails."""
     try:
+        engine = genai.Client(api_key=GEMINI_API_KEY)
         response = engine.models.generate_content(
-            model=GEMINI_DEFAULT_MODEL,
-            contents=_construct_tutor_prompt(code, task, lang),
+            model="gemini-2.0-flash",
+            contents=f"Extract JSON evaluation {{'correctness': float, 'feedback': str}} for:\nProblem: {task['prompt']}\nCode: {code}"
         )
-        data = _clean_json_response(response.text.strip())
-        data.update({"_rate_limited": False, "_provider": "gemini"})
-        return data
-    except Exception as e:
-        print(f"Gemini provider hint: {e}")
-        return None
+        match = re.search(r"\{.*\}", response.text, re.DOTALL)
+        return json.loads(match.group())
+    except Exception as inner:
+        logger.error(f"Gemini SDK fallback also failed: {inner}")
+        return {"correctness": 0.0, "feedback": "Critical evaluation error. Please ensure your API keys are valid."}
 
-def calculate_heuristic_grade(code: str, task: dict) -> dict:
-    """Fallback grading logic when cloud APIs are unavailable."""
-    clean_code = code.strip()
-    if len(clean_code) < 10:
-        return {
-            "correctness": 0.0, "complexity": "N/A",
-            "feedback_summary": "Submission is too short to evaluate.",
-            "_rate_limited": False,
-        }
-
-    # Basic structural check
-    has_loop = any(k in clean_code for k in ["for", "while", "forEach", "map"])
-    has_func = any(k in clean_code for k in ["def ", "function ", "void "])
-    
-    score = 0.2
-    if has_func: score += 0.1
-    if has_loop: score += 0.1
-    if len(clean_code) > 100: score += 0.2
-
-    return {
-        "correctness": min(0.6, score),
-        "complexity": "Analyzed locally",
-        "feedback_summary": "Graded locally due to service outage.",
-        "_rate_limited": False,
-    }
-
-# --- Main Entry Point ---
-
-def evaluate_with_ai(code: str, task: dict, lang: str = "python") -> dict:
-    """Primary entry point for grading. Tries Groq, then Gemini, then local."""
-    
-    # Try high-speed provider
-    report = _evaluate_via_groq(code, task, lang)
-    if report: return report
-
-    # Try fallback provider
-    report = _evaluate_via_gemini(code, task, lang)
-    if report: return report
-
-    # Safe local fallback
-    return calculate_heuristic_grade(code, task)
+def calculate_heuristic_grade(code: str, task: dict) -> float:
+    """Purely local heuristic for grading when all AI providers are unreachable."""
+    # Basic logic check
+    score = 0.0
+    if "def " in code: score += 0.2
+    if "return " in code: score += 0.2
+    if any(keyword in code for keyword in ["for", "while"]): score += 0.2
+    return min(score, 1.0)

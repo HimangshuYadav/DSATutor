@@ -1,122 +1,94 @@
 """
-Inference Baseline for DSATutor.
-Evaluates an LLM-based agent against the deterministic task bank.
-Follows the OpenEnv standard logging format.
+Baseline Agent for DSATutor Benchmarking.
+Uses an LLM to generate solutions and evaluates them using the tutor server.
 """
 
 import asyncio
 import os
 import httpx
+import logging
 from typing import List, Optional
 from openai import OpenAI
 
 # Environment configuration
-API_BASE = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+API_BASE = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
 MODEL = os.getenv("MODEL_NAME", "llama-3.3-70b-versatile")
-TOKEN = os.getenv("HF_TOKEN") or os.getenv("API_KEY") or os.getenv("GROQ_API_KEY")
+TOKEN = os.getenv("HF_TOKEN") or os.getenv("GROQ_API_KEY") or os.getenv("GEMINI_API_KEY")
 TARGET_URL = os.getenv("ENV_URL", "http://127.0.0.1:7860")
 
-# OpenAI client initialization
-llm_client = OpenAI(base_url=API_BASE, api_key=TOKEN)
+# Setup clean logging
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
 
-# Standard OpenEnv Logging Format
+# Standard OpenEnv Logging Helpers
 def log_start(task: str, env: str, model: str):
-    print(f"[START] task={task} env={env} model={model}", flush=True)
+    logger.info(f"[START] task={task} env={env} model={model}")
 
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]):
-    err_str = error if error else "null"
-    done_str = str(done).lower()
-    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_str} error={err_str}", flush=True)
+    logger.info(f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error or 'null'}")
 
 def log_end(success: bool, steps: int, score: float, rewards: List[float]):
-    rewards_csv = ",".join(f"{r:.2f}" for r in rewards)
-    success_str = str(success).lower()
-    print(f"[END] success={success_str} steps={steps} score={score:.3f} rewards={rewards_csv}", flush=True)
+    logger.info(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={','.join(f'{r:.2f}' for r in rewards)}")
 
-# Problem catalog
-AGENT_TASKS = [
-    {"title": "Two Sum", "prompt": "Solve Two Sum in Python. Define `two_sum(nums, target)`. Return ONLY code."},
-    {"title": "Longest Increasing Subsequence", "prompt": "Solve LIS in Python. Define `lis_length(nums)`. Return ONLY code."},
-    {"title": "Number of Islands", "prompt": "Solve Number of Islands in Python. Define `num_islands(grid)`. Return ONLY code."},
-    {"title": "Valid Parentheses", "prompt": "Solve Valid Parentheses in Python. Define `is_valid(s)`. Return ONLY code."},
-    {"title": "Merge K Sorted Lists", "prompt": "Solve Merge K Sorted Lists in Python. Define `merge_k_lists(lists)`. Return ONLY code."},
+# Task configuration for the agent
+TASKS = [
+    {"title": "Two Sum", "prompt": "Implement Two Sum in Python. Define `two_sum(nums, target)`. Return ONLY code."},
+    {"title": "Longest Increasing Subsequence", "prompt": "Implement LIS in Python. Define `lis_length(nums)`. Return ONLY code."},
+    {"title": "Number of Islands", "prompt": "Implement Number of Islands in Python. Define `num_islands(grid)`. Return ONLY code."},
+    {"title": "Valid Parentheses", "prompt": "Implement Valid Parentheses in Python. Define `is_valid(s)`. Return ONLY code."},
+    {"title": "Merge K Sorted Lists", "prompt": "Implement Merge K Sorted Lists in Python. Define `merge_k_lists(lists)`. Return ONLY code."},
 ]
 
-def parse_llm_response(text: str) -> str:
-    """Cleans up LLM output to extract pure Python code."""
-    if "```python" in text:
-        return text.split("```python")[1].split("```")[0].strip()
-    if "```" in text:
-        return text.split("```")[1].split("```")[0].strip()
-    return text.strip()
-
-async def fetch_llm_code(prompt: str) -> str:
-    """Asynchronous wrapper for LLM code generation."""
+async def generate_code(prompt: str) -> str:
+    """Invokes the LLM to generate an algorithmic solution."""
     try:
+        # Use OpenAI-style client
+        client = OpenAI(base_url=API_BASE, api_key=TOKEN)
         completion = await asyncio.to_thread(
-            llm_client.chat.completions.create,
+            client.chat.completions.create,
             model=MODEL,
-            messages=[
-                {"role": "system", "content": "You are a senior algorithms engineer. Provide concise Python implementations."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.1,
-            max_tokens=800,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1
         )
-        return parse_llm_response(completion.choices[0].message.content or "")
+        content = completion.choices[0].message.content or ""
+        # Precise code extraction
+        if "```python" in content:
+            return content.split("```python")[1].split("```")[0].strip()
+        elif "```" in content:
+            return content.split("```")[1].split("```")[0].strip()
+        return content.strip()
     except Exception as e:
-        return f"# Evaluation Error: {e}"
+        return f"# LLM Error: {e}"
 
-async def run_evaluation():
-    """Main evaluation loop for the baseline agent."""
-    async with httpx.AsyncClient(base_url=TARGET_URL, timeout=45.0) as session:
-        for task in AGENT_TASKS:
-            name = task["title"]
-            log_start(task=name, env="DSATutor", model=MODEL)
-
-            episode_rewards = []
-            final_step = 0
-            is_successful = False
-            last_err_msg = "null"
-
-            # Prepare the engine
+async def evaluate_tasks():
+    """Main loop to evaluate the agent across standard tasks."""
+    async with httpx.AsyncClient(base_url=TARGET_URL, timeout=60.0) as session:
+        for task in TASKS:
+            log_start(task=task["title"], env="DSATutor", model=MODEL)
+            
             try:
+                # Prepare environment
                 await session.post("/reset")
-            except Exception:
-                log_end(success=False, steps=0, score=0.0, rewards=[])
-                continue
-
-            # Interaction loop
-            try:
-                for current_step in range(1, 4): # Max 3 attempts
-                    final_step = current_step
-                    solution_code = await fetch_llm_code(task["prompt"])
+                
+                # Interaction attempt
+                solution = await generate_code(task["prompt"])
+                
+                response = await session.post("/api/grade_deterministic", json={
+                    "code": solution,
+                    "problem": task["title"]
+                })
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    reward = data.get("score", 0.0)
+                    log_step(step=1, action="solve", reward=reward, done=(reward >= 0.9), error=None)
+                    log_end(success=(reward >= 0.9), steps=1, score=reward, rewards=[reward])
+                else:
+                    log_end(success=False, steps=1, score=0.0, rewards=[0.0])
                     
-                    try:
-                        resp = await session.post(
-                            "/api/grade_deterministic",
-                            json={"code": solution_code, "problem": name}
-                        )
-                        
-                        if resp.status_code == 200:
-                            playback = resp.json()
-                            reward = playback.get("correctness", 0.0)
-                            done = reward >= 0.9
-                            last_err_msg = "null"
-                        else:
-                            reward, done, last_err_msg = 0.0, False, f"server_err_{resp.status_code}"
-                    except Exception:
-                        reward, done, last_err_msg = 0.0, False, "connection_lost"
-
-                    episode_rewards.append(reward)
-                    log_step(step=current_step, action="submit_code", reward=reward, done=done, error=last_err_msg)
-
-                    if done:
-                        is_successful = True
-                        break
-            finally:
-                avg_score = sum(episode_rewards) / len(episode_rewards) if episode_rewards else 0.0
-                log_end(success=is_successful, steps=final_step, score=avg_score, rewards=episode_rewards)
+            except Exception as e:
+                logger.error(f"Execution failure: {e}")
 
 if __name__ == "__main__":
-    asyncio.run(run_evaluation())
+    asyncio.run(evaluate_tasks())
