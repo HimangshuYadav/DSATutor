@@ -6,14 +6,16 @@ EASY_TASKS = [
         "title": "Two Sum",
         "prompt": "Find two indices in 'nums' that sum to 'target'.",
         "difficulty": "Easy",
-        "topic": "Arrays"
+        "topic": "Arrays",
+        "complexity": "O(N)"
     },
     {
         "id": "task4",
         "title": "Valid Parentheses",
         "prompt": "Check if bracket string 's' is syntactically valid.",
         "difficulty": "Easy",
-        "topic": "Stacks"
+        "topic": "Stacks",
+        "complexity": "O(N)"
     }
 ]
 
@@ -23,7 +25,8 @@ MEDIUM_TASKS = [
         "title": "Longest Increasing Subsequence",
         "prompt": "Find the length of the longest strictly increasing subsequence in 'nums'.",
         "difficulty": "Medium",
-        "topic": "DP"
+        "topic": "DP",
+        "complexity": "O(N log N)"
     }
 ]
 
@@ -33,14 +36,16 @@ HARD_TASKS = [
         "title": "Number of Islands",
         "prompt": "Count the number of separate '1' (land) areas in a binary grid.",
         "difficulty": "Hard",
-        "topic": "Graphs"
+        "topic": "Graphs",
+        "complexity": "O(M * N)"
     },
     {
         "id": "task5",
         "title": "Merge K Sorted Lists",
         "prompt": "Merge 'k' sorted lists into one master sorted list.",
         "difficulty": "Hard",
-        "topic": "Heaps"
+        "topic": "Heaps",
+        "complexity": "O(N log K)"
     }
 ]
 

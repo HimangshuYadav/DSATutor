@@ -1,19 +1,19 @@
-INFO:     Started server process [48851]
+INFO:     Started server process [53094]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:7860 (Press CTRL+C to quit)
-INFO:     127.0.0.1:50597 - "POST /reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51321 - "POST /reset HTTP/1.1" 200 OK
 INFO:server.app:Grading submission for Two Sum
-INFO:     127.0.0.1:50597 - "POST /api/grade_deterministic HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50597 - "POST /reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51321 - "POST /api/grade_deterministic HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51321 - "POST /reset HTTP/1.1" 200 OK
 INFO:server.app:Grading submission for Longest Increasing Subsequence
-INFO:     127.0.0.1:50597 - "POST /api/grade_deterministic HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50597 - "POST /reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51321 - "POST /api/grade_deterministic HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51321 - "POST /reset HTTP/1.1" 200 OK
 INFO:server.app:Grading submission for Number of Islands
-INFO:     127.0.0.1:50597 - "POST /api/grade_deterministic HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50597 - "POST /reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51321 - "POST /api/grade_deterministic HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51321 - "POST /reset HTTP/1.1" 200 OK
 INFO:server.app:Grading submission for Valid Parentheses
-INFO:     127.0.0.1:50597 - "POST /api/grade_deterministic HTTP/1.1" 200 OK
-INFO:     127.0.0.1:50597 - "POST /reset HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51321 - "POST /api/grade_deterministic HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51321 - "POST /reset HTTP/1.1" 200 OK
 INFO:server.app:Grading submission for Merge K Sorted Lists
-INFO:     127.0.0.1:50597 - "POST /api/grade_deterministic HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51321 - "POST /api/grade_deterministic HTTP/1.1" 200 OK

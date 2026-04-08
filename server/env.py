@@ -9,16 +9,16 @@ class TutorEngine:
     
     def __init__(self):
         self.session = SessionRecord()
-        self.current_problem = random.choice(ALL_TASKS[0])
         self.difficulty_level = 0
+        self.current_problem = self._pick_problem(0)
         self.max_steps = 15
         self.step_count = 0
 
     def reset(self) -> TutorObservation:
         """Starts a fresh tutoring session."""
         self.session = SessionRecord()
-        self.current_problem = random.choice(ALL_TASKS[0])
         self.difficulty_level = 0
+        self.current_problem = self._pick_problem(0)
         self.step_count = 0
         return self._generate_observation("Welcome to DSATutor! Let's build your algorithmic skills.")
 
@@ -30,8 +30,9 @@ class TutorEngine:
         done = False
 
         if action.action_type == "suggest_problem":
+            self.session.completed_problems.append(self.current_problem["id"])
             target_diff = action.difficulty if action.difficulty is not None else self.difficulty_level
-            self.current_problem = random.choice(ALL_TASKS[target_diff])
+            self.current_problem = self._pick_problem(target_diff)
             self.difficulty_level = target_diff
             feedback = f"New focus: {self.current_problem['title']}"
             reward = -0.05 # Minor penalty for context switching
@@ -41,7 +42,7 @@ class TutorEngine:
                 self.difficulty_level += 1
             elif action.adjustment == "down" and self.difficulty_level > 0:
                 self.difficulty_level -= 1
-            self.current_problem = random.choice(ALL_TASKS[self.difficulty_level])
+            self.current_problem = self._pick_problem(self.difficulty_level)
             feedback = f"Level adjusted to {self.difficulty_level}. Here's a {self.current_problem['difficulty']} problem."
             reward = 0.0
 
@@ -53,6 +54,15 @@ class TutorEngine:
                 result = evaluate_student_code(action.code_string, self.current_problem, action.language)
                 score = result["score"]
                 feedback = result["feedback"]
+                
+                # Internal helper to append messages without crashing or losing dict structure
+                def append_feedback_note(fb, note):
+                    if isinstance(fb, dict):
+                        # Add to the 'feedback' or 'overall' key, or create it
+                        key = "feedback" if "feedback" in fb else ("overall" if "overall" in fb else "status")
+                        fb[key] = (fb.get(key, "") + "\n" + note).strip()
+                        return fb
+                    return (str(fb) + " " + note).strip()
                 
                 # Reward Shaping
                 reward = score
@@ -69,10 +79,10 @@ class TutorEngine:
                 # Adaptive Advancement
                 if self.session.streak >= 2 and self.difficulty_level < 2:
                     self.difficulty_level += 1
-                    feedback += " You're on fire! Advancing to the next level."
+                    feedback = append_feedback_note(feedback, "You're on fire! Advancing to the next level.")
                 elif score < 0.2 and self.difficulty_level > 0:
                     self.difficulty_level -= 1
-                    feedback += " This one is tough. Let's practice some fundamentals first."
+                    feedback = append_feedback_note(feedback, "This one is tough. Let's practice some fundamentals first.")
 
         # Session Termination
         if self.step_count >= self.max_steps:
@@ -88,13 +98,65 @@ class TutorEngine:
         
         return obs, reward, done, {}
 
-    def _generate_observation(self, feedback: str) -> TutorObservation:
+    def _generate_observation(self, feedback: Any) -> TutorObservation:
         """Utility to package the current state into an observation."""
+        formatted_feedback = self._format_feedback_message(feedback)
+        
+        # Display score is capped at 1.0 for the student
+        display_score = min(self.session.historical_scores[-1], 1.0) if self.session.historical_scores else 0.0
+
         return TutorObservation(
             current_problem=f"{self.current_problem['title']}: {self.current_problem['prompt']}",
             difficulty=self.difficulty_level,
-            feedback_summary=feedback,
-            score=self.session.historical_scores[-1] if self.session.historical_scores else 0.0,
+            feedback_summary=formatted_feedback,
+            score=display_score,
             done=False,
             reward=0.0
         )
+
+    def _format_feedback_message(self, feedback: Any) -> str:
+        """Converts structured feedback into a clean, human-readable string."""
+        if isinstance(feedback, str):
+            return feedback
+        
+        if not isinstance(feedback, dict):
+            return str(feedback)
+
+        # Handle structured dictionary feedback with arbitrary keys
+        lines = []
+        
+        # Priority: Show general feedback or overall summary first
+        for key in ["feedback", "overall", "summary"]:
+            if key in feedback and isinstance(feedback[key], str):
+                lines.append(feedback[key])
+                lines.append("")
+                break
+
+        # Dynamically handle all other category-like keys
+        for key, value in feedback.items():
+            if key.lower() in ["feedback", "overall", "summary", "correctness"]:
+                continue
+                
+            if isinstance(value, list):
+                lines.append(f"**{key.replace('_', ' ').capitalize()}:**")
+                for item in value:
+                    lines.append(f"• {item}")
+                lines.append("")
+            elif isinstance(value, str):
+                 lines.append(f"**{key.replace('_', ' ').capitalize()}:** {value}")
+                 lines.append("")
+
+        return "\n".join(lines).strip() or str(feedback)
+
+    def _pick_problem(self, difficulty: int) -> Dict[str, Any]:
+        """Selects a problem of the given difficulty that has not been completed."""
+        available = [t for t in ALL_TASKS[difficulty] if t["id"] not in self.session.completed_problems]
+        
+        # If all problems seen, reset the seen list for this difficulty level
+        if not available:
+            # Keep only problems from OTHER difficulties in the completed list
+            other_diff_ids = [t["id"] for i, tasks in enumerate(ALL_TASKS) if i != difficulty for t in tasks]
+            self.session.completed_problems = [pid for pid in self.session.completed_problems if pid in other_diff_ids]
+            available = ALL_TASKS[difficulty]
+            
+        return random.choice(available)

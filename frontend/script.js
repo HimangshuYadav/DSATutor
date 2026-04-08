@@ -364,7 +364,12 @@ function renderFeedback(obs, reward) {
         title.innerText = `Great Job! (Score: ${reward.value})`;
     }
 
-    text.innerText = obs.feedback_summary || "No feedback.";
+    // Format Markdown-like syntax to basic HTML for the UI
+    let formatted = (obs.feedback_summary || "No feedback.")
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
+    
+    text.innerHTML = formatted;
 }
 
 // ── Stats Bar ─────────────────────────────────────────────────────

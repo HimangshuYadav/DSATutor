@@ -8,7 +8,7 @@ class TutorObservation(BaseModel):
     feedback_summary: str = Field(..., description="Reflective feedback on the student's last submission")
     score: float = Field(0.0, description="Correctness score of the last submission (0 to 1)")
     done: bool = Field(False, description="Whether the current learning objective is met")
-    reward: float = Field(0.0, description="The RL reward signal for the last action taken")
+    reward: float = Field(0.0, description="The RL reward signal (includes bonuses > 1.0)")
 
 class TutorAction(BaseModel):
     """Represents an instructional action taken by the tutor or an agent."""
@@ -25,6 +25,7 @@ class SessionRecord(BaseModel):
     streak: int = 0
     attempts_count: int = 0
     historical_scores: List[float] = []
+    completed_problems: List[str] = []
 
 class CodeSubmission(BaseModel):
     """A direct student submission for evaluation."""

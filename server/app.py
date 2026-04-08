@@ -2,7 +2,9 @@ import os
 import uvicorn
 import logging
 from fastapi import FastAPI, HTTPException
-from .models import TutorObservation, TutorAction, CodeSubmission
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from .models import TutorObservation, TutorAction, SessionRecord, CodeSubmission
 from .env import TutorEngine
 from .deterministic_grader import grade_deterministic, FIXED_TASKS
 
@@ -14,6 +16,14 @@ app = FastAPI(
     title="DSATutor Benchmark",
     description="Adaptive Learning Environment for Data Structures and Algorithms."
 )
+
+# Mount the frontend directory for static assets (styles, images, scripts)
+app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
+
+@app.get("/")
+async def serve_ui():
+    """Serves the main tutoring interface."""
+    return FileResponse("frontend/index.html")
 
 # Shared tutoring engine instance
 engine = TutorEngine()
@@ -60,6 +70,76 @@ async def run_benchmark_grading(submission: CodeSubmission):
     logger.info(f"Grading submission for {submission.problem}")
     
     return grade_deterministic(submission.code, matched_task_id)
+
+# ── FRONTEND BRIDGING ROUTES ──────────────────────────────────────
+
+@app.post("/api/setup")
+async def frontend_setup():
+    """Stub for frontend setup initialization."""
+    return {"status": "ok"}
+
+@app.post("/api/assessment")
+async def frontend_assessment():
+    """Stub for frontend assessment completion."""
+    return {"status": "ok"}
+
+@app.get("/api/problem")
+async def get_current_problem():
+    """Returns the current problem details for the frontend UI."""
+    return {
+        "problem": {
+            "title": engine.current_problem["title"],
+            "description": engine.current_problem["prompt"],
+            "expected_complexity": engine.current_problem.get("complexity", "O(?)")
+        },
+        "level": engine.difficulty_level
+    }
+
+@app.post("/api/run")
+async def run_code(submission: CodeSubmission):
+    """Main execution point for the UI playground."""
+    action = TutorAction(
+        action_type="evaluate_code",
+        code_string=submission.code,
+        language=submission.language
+    )
+    obs, reward, done, info = engine.step(action)
+    
+    return {
+        "observation": obs,
+        "reward": {"value": min(reward, 1.0)},
+        "state": engine.session,
+        "done": done,
+        "info": info
+    }
+
+@app.get("/api/progress")
+async def get_progress():
+    """Provides data for the frontend Chart.js visualization."""
+    return {
+        "attempts": list(range(1, len(engine.session.historical_scores) + 1)),
+        "scores": engine.session.historical_scores
+    }
+
+@app.post("/api/skip")
+async def skip_problem():
+    """Triggers a problem change from the UI."""
+    action = TutorAction(action_type="suggest_problem")
+    obs, reward, done, info = engine.step(action)
+    
+    return {
+        "problem": {
+            "title": engine.current_problem["title"],
+            "description": engine.current_problem["prompt"],
+            "expected_complexity": engine.current_problem.get("complexity", "O(?)")
+        },
+        "level": engine.difficulty_level,
+        "state": engine.session,
+        "observation": obs,
+        "reward": {"value": reward}
+    }
+
+# ──────────────────────────────────────────────────────────────────
 
 def main():
     """Entry point for running the tutor server."""

@@ -23,10 +23,17 @@ def evaluate_with_ai(code: str, task: dict, language: str) -> dict:
     """Performs deep code evaluation using available AI providers."""
     try:
         # Standardize interaction with LLM
+        system_prompt = (
+            "You are a specialized DSA Tutor. Evaluate the submission's CORRECTNESS (0-1) "
+            "and provide SOCRATIC FEEDBACK in valid JSON format. "
+            "The JSON must have these keys: 'correctness' (float), 'feedback' (string), "
+            "'strengths' (list of strings), 'weaknesses' (list of strings), 'suggestions' (list of strings)."
+        )
+        
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
-                {"role": "system", "content": "You are a specialized DSA Tutor. Evaluate the submission's CORRECTNESS (0-1) and provide SOCRATIC FEEDBACK in JSON format."},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Problem: {task['prompt']}\nLanguage: {language}\nSubmitted Code:\n{code}"}
             ],
             response_format={"type": "json_object"}
